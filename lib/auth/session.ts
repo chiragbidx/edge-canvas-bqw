@@ -1,6 +1,8 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "./auth";
-import { prisma } from "@/lib/db";
+import { PrismaClient } from "@prisma/client";
+
+export const prisma = new PrismaClient();
 
 /**
  * Get current session user and default team.
