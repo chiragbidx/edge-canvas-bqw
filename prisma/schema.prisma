@@ -1,0 +1,199 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model
+model User {
+  id            String        @id @default(uuid())
+  email         String        @unique
+  name          String?
+  password      String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  teams         TeamMember[]
+  ownedPrompts  Prompt[]      @relation("PromptOwner")
+  ownedTeams    Team[]        @relation("TeamOwner")
+  promptTests   PromptTest[]
+  promptVersions PromptVersion[]
+  comments      PromptComment[]
+  // Possible: user role for instance-level admin (not team)
+}
+
+// Team and Membership (Workspace)
+model Team {
+  id            String        @id @default(uuid())
+  name          String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  ownerId       String
+  members       TeamMember[]
+  prompts       Prompt[]
+  apiKeys       APIKey[]
+  activityLogs  ActivityLog[]
+  ownedBy       User          @relation("TeamOwner", fields: [ownerId], references: [id])
+}
+
+model TeamMember {
+  id        String   @id @default(uuid())
+  userId    String
+  teamId    String
+  role      TeamRole @default(MEMBER)
+  invitedAt DateTime @default(now())
+  joinedAt  DateTime?
+  user      User     @relation(fields: [userId], references: [id])
+  team      Team     @relation(fields: [teamId], references: [id])
+
+  @@unique([userId, teamId])
+}
+
+enum TeamRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+// Prompt Library/Collection
+model PromptCollection {
+  id         String     @id @default(uuid())
+  teamId     String
+  name       String
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  team       Team       @relation(fields: [teamId], references: [id])
+  prompts    Prompt[]
+}
+
+model Prompt {
+  id            String              @id @default(uuid())
+  teamId        String
+  ownerId       String
+  collectionId  String?
+  name          String
+  description   String?
+  model         String
+  tags          String[]
+  variables     PromptVariable[]
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  favorites     FavoritePrompt[]
+  versions      PromptVersion[]
+  tests         PromptTest[]
+  collection    PromptCollection?   @relation(fields: [collectionId], references: [id])
+  team          Team                @relation(fields: [teamId], references: [id])
+  owner         User                @relation("PromptOwner", fields: [ownerId], references: [id])
+  comments      PromptComment[]
+}
+
+model PromptVariable {
+  id         String    @id @default(uuid())
+  promptId   String
+  name       String
+  type       String
+  default    String?
+  prompt     Prompt    @relation(fields: [promptId], references: [id])
+}
+
+// Prompt versioning
+model PromptVersion {
+  id            String      @id @default(uuid())
+  promptId      String
+  versionNumber Int
+  content       String
+  model         String
+  authorId      String
+  createdAt     DateTime    @default(now())
+  notes         String?
+  prompt        Prompt      @relation(fields: [promptId], references: [id])
+  author        User        @relation(fields: [authorId], references: [id])
+}
+
+// Prompt favorites
+model FavoritePrompt {
+  id        String  @id @default(uuid())
+  promptId  String
+  userId    String
+  createdAt DateTime   @default(now())
+  prompt    Prompt     @relation(fields: [promptId], references: [id])
+  user      User       @relation(fields: [userId], references: [id])
+
+  @@unique([promptId, userId])
+}
+
+// Testing/playground
+model PromptTest {
+  id           String     @id @default(uuid())
+  promptId     String
+  versionId    String?
+  userId       String
+  variables    Json
+  output       String
+  responseTime Int
+  tokenUsage   Int
+  createdAt    DateTime   @default(now())
+  prompt       Prompt     @relation(fields: [promptId], references: [id])
+  version      PromptVersion? @relation(fields: [versionId], references: [id])
+  user         User       @relation(fields: [userId], references: [id])
+  testCases    TestCase[]
+}
+
+// Saved test cases
+model TestCase {
+  id         String    @id @default(uuid())
+  testId     String
+  name       String
+  description String?
+  test       PromptTest @relation(fields: [testId], references: [id])
+}
+
+// Team comments/activity
+model PromptComment {
+  id         String      @id @default(uuid())
+  promptId   String
+  authorId   String
+  content    String
+  createdAt  DateTime    @default(now())
+  prompt     Prompt      @relation(fields: [promptId], references: [id])
+  author     User        @relation(fields: [authorId], references: [id])
+}
+
+// Activity Log
+model ActivityLog {
+  id           String      @id @default(uuid())
+  teamId       String
+  type         String
+  actorId      String?
+  message      String
+  createdAt    DateTime    @default(now())
+  team         Team        @relation(fields: [teamId], references: [id])
+  actor        User?       @relation(fields: [actorId], references: [id])
+}
+
+// API key model
+model APIKey {
+  id         String    @id @default(uuid())
+  teamId     String
+  key        String    @unique
+  createdAt  DateTime  @default(now())
+  revoked    Boolean   @default(false)
+  name       String?
+  team       Team      @relation(fields: [teamId], references: [id])
+  usageLogs  APIKeyUsage[]
+}
+
+// Track API key usage
+model APIKeyUsage {
+  id         String    @id @default(uuid())
+  apiKeyId   String
+  usedAt     DateTime  @default(now())
+  userAgent  String?
+  ip         String?
+  promptId   String?
+  prompt     Prompt?   @relation(fields: [promptId], references: [id])
+  apiKey     APIKey    @relation(fields: [apiKeyId], references: [id])
+}
